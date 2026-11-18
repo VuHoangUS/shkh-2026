@@ -250,6 +250,13 @@ input[type="text"]:focus{
 }
 
 main{ position:relative; z-index:3; }
+.note-warn{
+  display:flex; gap:12px; align-items:flex-start; margin-bottom:18px;
+  background:#fff7ec; color:#8a4510; border:1.5px solid #f6cfa3; border-left:6px solid var(--orange);
+  border-radius:14px; padding:12px 16px; font-size:14.5px; box-shadow:0 4px 14px rgba(232,112,42,.10);
+}
+.note-warn svg{ flex:none; margin-top:2px; color:var(--orange); }
+.note-warn b{ color:var(--orange-dark); }
 /* ---- Ô tìm kiếm + gợi ý ---- */
 .combo{ position:relative; }
 .combo input[type="text"]{ padding:14px 44px 14px 42px; font-size:16px; }
@@ -357,6 +364,10 @@ main{ position:relative; z-index:3; }
   </header>
 
   <main>
+    <div class="note-warn reveal d1" role="note">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M1 21h22L12 2 1 21Zm12-3h-2v-2h2v2Zm0-4h-2v-4h2v4Z"/></svg>
+      <span><b>Lưu ý:</b> Chỉ khi hoàn thành đủ <b>2 bài Pre-test và Post-test</b> thì mới đủ điều kiện có tên trong danh sách tham dự.</span>
+    </div>
     <section class="card reveal d1">
       <h2 class="card-title"><span class="step">1</span>Tìm tên hoặc email của bạn</h2>
       <div class="notice">
