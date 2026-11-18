@@ -23,7 +23,7 @@ const MIN_CHARS      = 5;      // chỉ gợi ý khi gõ từ ký tự thứ 5
 const MAX_SUGGEST    = 8;      // số gợi ý tối đa
 const CACHE_SECONDS  = 600;    // dữ liệu nhớ tạm 10 phút (sửa sheet -> tối đa 10 phút sau web mới cập nhật)
 const DEPT_PASSCODE  = '';     // để trống = ai cũng xem được danh sách theo khoa/phòng; đặt mã (vd 'abc123') để khóa
-const CODE_VERSION   = '2026-11-18.4';
+const CODE_VERSION   = '2026-11-18.5';
 const CK             = 'v4_';  // tiền tố cache (đổi khi đổi cấu trúc dữ liệu)
 
 /* ------------------------------ ENTRY ------------------------------ */
@@ -337,12 +337,11 @@ function people_() {
 }
 
 function depts_() {
-  const people = people_(), counts = {}, names = {};
+  const people = people_(), counts = {};
   people.forEach(function (p) {
     if (!p.dept) return;
     const n = norm_(p.dept);
     counts[n] = (counts[n] || 0) + 1;
-    names[n] = names[n] || p.dept;
   });
 
   const list = [], used = {};
@@ -357,9 +356,6 @@ function depts_() {
       list.push({ name: name, people: counts[norm_(name)] || 0 });
     }
   }
-  Object.keys(counts).forEach(function (n) { // khoa/phòng có trong dữ liệu nhưng chưa có trong DS
-    if (!used[n]) list.push({ name: names[n], people: counts[n] });
-  });
   return { depts: list, total: loadEvents_().length };
 }
 
