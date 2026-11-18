@@ -288,6 +288,8 @@ main{ position:relative; z-index:3; }
 .sugg .tx b{ display:block; font-weight:600; word-break:break-word; }
 .sugg .tx small{ color:var(--muted); font-size:12.5px; }
 .sugg .cnt{ flex:none; font-size:12px; font-weight:700; color:var(--brand); background:#fff; border:1px solid var(--border); border-radius:999px; padding:2px 9px; }
+.sugg .mail, .result-head .mail{ display:block; color:var(--muted); font-size:13px; font-weight:500; word-break:break-all; }
+.result-head .mail{ margin-top:2px; }
 .sugg mark{ background:#fff3b0; color:inherit; border-radius:3px; padding:0 1px; }
 .sugg .empty{ cursor:default; color:var(--muted); justify-content:center; }
 .sugg .empty:hover{ background:#fff; color:var(--muted); }
@@ -432,7 +434,8 @@ function renderSugg(list, query){
       const ini = esc((strip(s.type==='email' ? s.sub : s.label).trim()[0] || '?').toUpperCase());
       const main = s.type==='email' ? esc(s.label) : highlight(s.label, query);
       const sub = s.type==='email' ? '<small>' + esc(s.sub) + '</small>' : '';
-      return '<li role="option" data-i="'+i+'"><span class="av">'+ini+'</span><span class="tx"><b>'+main+'</b>'+sub+'</span><span class="cnt">'+s.count+' buổi</span></li>';
+      const mail = s.type==='name' && s.email ? '<span class="mail">' + esc(s.email) + '</span>' : '';
+      return '<li role="option" data-i="'+i+'"><span class="av">'+ini+'</span><span class="tx"><b>'+main+'</b>'+sub+mail+'</span><span class="cnt">'+s.count+' buổi</span></li>';
     }).join('');
   }
   sugg.classList.remove('hidden'); q.setAttribute('aria-expanded','true');
@@ -535,7 +538,7 @@ function showResult(res){
   const ini = esc((strip(res.person).trim()[0] || '?').toUpperCase());
   resultCard.className = 'card result found';
   resultCard.innerHTML =
-    '<div class="result-head"><div class="av">'+ini+'</div><div><h2>'+esc(res.person)+'</h2><p>Đã tham dự <b>'+res.events.length+'</b> buổi Sinh hoạt Khoa học / Hội thảo Khoa học</p></div></div>' +
+    '<div class="result-head"><div class="av">'+ini+'</div><div><h2>'+esc(res.person)+'</h2>'+(res.emails&&res.emails.length?'<span class="mail">'+res.emails.map(esc).join(' · ')+'</span>':'')+'<p>Đã tham dự <b>'+res.events.length+'</b> buổi Sinh hoạt Khoa học / Hội thảo Khoa học</p></div></div>' +
     '<ul class="ev-list">' + res.events.map((e,i) =>
       '<li class="ev" style="animation-delay:'+Math.min(i*60,600)+'ms">'+dateBadge(e.date)+
       '<div><div class="ev-name">'+esc(e.event)+'</div><span class="ev-tag">✔ Đã tham dự</span></div></li>').join('') + '</ul>';

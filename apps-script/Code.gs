@@ -16,7 +16,7 @@ const SHEET_NAME     = 'Tra cứu';
 const MIN_CHARS      = 5;      // chỉ gợi ý khi gõ từ ký tự thứ 5
 const MAX_SUGGEST    = 8;      // số gợi ý tối đa
 const CACHE_SECONDS  = 600;    // dữ liệu được nhớ tạm 10 phút (sửa sheet -> tối đa 10 phút sau web mới cập nhật)
-const CODE_VERSION   = '2026-11-18.1';
+const CODE_VERSION   = '2026-11-18.2';
 
 /* ------------------------------ ENTRY ------------------------------ */
 
@@ -50,11 +50,24 @@ function norm_(s) {
     .trim();
 }
 
+// "email@gmail.com" -> "Em**l@gmail.com" (giữ 2 ký tự đầu + 1 ký tự cuối phần tên)
 function maskEmail_(email) {
+  email = String(email || '');
   const i = email.indexOf('@');
-  if (i < 0) return email.slice(0, 2) + '***';
-  const local = email.slice(0, i), domain = email.slice(i);
-  return local.slice(0, Math.min(2, local.length)) + '***' + domain;
+  const local = i < 0 ? email : email.slice(0, i);
+  const domain = i < 0 ? '' : email.slice(i);
+  if (!local) return '';
+  let head;
+  if (local.length <= 3) head = local.slice(0, 1) + '**';
+  else head = local.slice(0, 2) + '**' + local.slice(-1);
+  return head.charAt(0).toUpperCase() + head.slice(1) + domain;
+}
+
+// email xuất hiện nhiều nhất trong {email: số lần}
+function topEmail_(counts) {
+  let best = '', n = 0;
+  for (const k in counts) if (counts[k] > n) { best = k; n = counts[k]; }
+  return best;
 }
 
 /* ------------------------------ DATA ------------------------------ */
@@ -152,16 +165,21 @@ function suggest_(q) {
       const pos = r[4].indexOf(nq);
       if (pos < 0) continue;
       const f = found[r[4]] || (found[r[4]] = {
-        type: 'name', key: r[4], label: r[2], sub: '',
+        type: 'name', key: r[4], label: r[2], sub: '', mails: {},
         count: 0, rank: pos === 0 ? 0 : (r[4].indexOf(' ' + nq) >= 0 ? 1 : 2)
       });
       f.count++;
+      if (r[3]) f.mails[r[3]] = (f.mails[r[3]] || 0) + 1;
     }
   }
 
   const list = Object.keys(found).map(function (k) { return found[k]; })
     .sort(function (a, b) { return a.rank - b.rank || b.count - a.count || a.label.localeCompare(b.label); })
-    .slice(0, MAX_SUGGEST);
+    .slice(0, MAX_SUGGEST)
+    .map(function (f) {
+      if (f.type === 'name') { f.email = maskEmail_(topEmail_(f.mails)); delete f.mails; }
+      return f;
+    });
 
   return { suggestions: list, minChars: MIN_CHARS };
 }
@@ -176,11 +194,13 @@ function search_(type, key) {
   const col = type === 'email' ? 3 : 4;
   const events = [], seen = {};
   let person = '';
+  const mails = {};
 
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
     if (r[col] !== k) continue;
     if (!person) person = r[2];
+    if (r[3]) mails[r[3]] = (mails[r[3]] || 0) + 1;
     const id = r[0] + '|' + r[1];
     if (seen[id]) continue; // bỏ trùng cùng ngày + cùng sự kiện
     seen[id] = 1;
@@ -188,5 +208,7 @@ function search_(type, key) {
   }
 
   events.sort(function (a, b) { return dateKey_(b.date) - dateKey_(a.date); });
-  return { person: person, events: events };
+  const emails = Object.keys(mails).sort(function (a, b) { return mails[b] - mails[a]; })
+    .slice(0, 3).map(maskEmail_);
+  return { person: person, emails: emails, events: events };
 }
