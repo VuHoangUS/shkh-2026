@@ -2,7 +2,7 @@
  * TRA CỨU SINH HOẠT KHOA HỌC / HỘI THẢO KHOA HỌC 2026
  * Backend (Google Apps Script) – đọc sheet "Tra cứu".
  *
- * Cột: A STT | B Ngày tổ chức | C Tên hội thảo | D Họ và tên | E Email
+ * Cột: A STT | B Ngày tổ chức | C Tên hội thảo | D Họ và tên | E Email | F Khoa/phòng
  * (Mã tự dò theo tiêu đề dòng 1; nếu không dò được sẽ dùng đúng thứ tự A–E.)
  *
  * API (GET):
@@ -16,7 +16,7 @@ const SHEET_NAME     = 'Tra cứu';
 const MIN_CHARS      = 5;      // chỉ gợi ý khi gõ từ ký tự thứ 5
 const MAX_SUGGEST    = 8;      // số gợi ý tối đa
 const CACHE_SECONDS  = 600;    // dữ liệu được nhớ tạm 10 phút (sửa sheet -> tối đa 10 phút sau web mới cập nhật)
-const CODE_VERSION   = '2026-11-18.2';
+const CODE_VERSION   = '2026-11-18.3';
 
 /* ------------------------------ ENTRY ------------------------------ */
 
@@ -63,6 +63,16 @@ function maskEmail_(email) {
   return head.charAt(0).toUpperCase() + head.slice(1) + domain;
 }
 
+// Khoa/phòng: ưu tiên giá trị cụ thể hơn "Khác", rồi đến giá trị xuất hiện nhiều nhất
+function topDept_(counts) {
+  let best = '', n = 0, bestOther = '', nOther = 0;
+  for (const k in counts) {
+    if (counts[k] > n) { best = k; n = counts[k]; }
+    if (norm_(k) !== 'khac' && counts[k] > nOther) { bestOther = k; nOther = counts[k]; }
+  }
+  return bestOther || best;
+}
+
 // email xuất hiện nhiều nhất trong {email: số lần}
 function topEmail_(counts) {
   let best = '', n = 0;
@@ -93,10 +103,10 @@ function findCol_(header, patterns, fallback) {
 // Trả về mảng gọn: [ngày, tên sự kiện, họ tên, email(thường), họ tên không dấu]
 function loadRows_() {
   const cache = CacheService.getScriptCache();
-  const meta = cache.get('rows_n');
+  const meta = cache.get('rowsv3_n');
   if (meta) {
     const keys = [];
-    for (let i = 0; i < +meta; i++) keys.push('rows_' + i);
+    for (let i = 0; i < +meta; i++) keys.push('rowsv3_' + i);
     const parts = cache.getAll(keys);
     if (keys.every(function (k) { return parts[k]; })) {
       return JSON.parse(keys.map(function (k) { return parts[k]; }).join(''));
@@ -114,6 +124,7 @@ function loadRows_() {
   const cEvent = findCol_(h, ['ten hoi thao', 'hoi thao', 'sinh hoat'], 2);
   const cName  = findCol_(h, ['ho va ten', 'ho ten'], 3);
   const cMail  = findCol_(h, ['email', 'mail'], 4);
+  const cDept  = findCol_(h, ['khoa', 'phong'], 5);
 
   const rows = [];
   for (let r = 1; r < data.length; r++) {
@@ -125,15 +136,16 @@ function loadRows_() {
       event,
       name,
       String(data[r][cMail] || '').trim().toLowerCase(),
-      norm_(name)
+      norm_(name),
+      String(data[r][cDept] || '').replace(/\s+/g, ' ').trim()
     ]);
   }
 
   try { // cache theo từng mảnh <= 90KB (giới hạn 100KB/khóa)
     const json = JSON.stringify(rows), size = 90000, put = {};
     let n = 0;
-    for (let i = 0; i < json.length; i += size) put['rows_' + n++] = json.slice(i, i + size);
-    put['rows_n'] = String(n);
+    for (let i = 0; i < json.length; i += size) put['rowsv3_' + n++] = json.slice(i, i + size);
+    put['rowsv3_n'] = String(n);
     cache.putAll(put, CACHE_SECONDS);
   } catch (err) { /* không cache được vẫn chạy bình thường */ }
 
@@ -157,19 +169,21 @@ function suggest_(q) {
       const mail = r[3];
       if (!mail || mail.indexOf(raw) < 0) continue;
       const f = found[mail] || (found[mail] = {
-        type: 'email', key: mail, label: maskEmail_(mail), sub: r[2],
+        type: 'email', key: mail, label: maskEmail_(mail), sub: r[2], depts: {},
         count: 0, rank: mail.indexOf(raw) === 0 ? 0 : 1
       });
       f.count++;
+      if (r[5]) f.depts[r[5]] = (f.depts[r[5]] || 0) + 1;
     } else {
       const pos = r[4].indexOf(nq);
       if (pos < 0) continue;
       const f = found[r[4]] || (found[r[4]] = {
-        type: 'name', key: r[4], label: r[2], sub: '', mails: {},
+        type: 'name', key: r[4], label: r[2], sub: '', mails: {}, depts: {},
         count: 0, rank: pos === 0 ? 0 : (r[4].indexOf(' ' + nq) >= 0 ? 1 : 2)
       });
       f.count++;
       if (r[3]) f.mails[r[3]] = (f.mails[r[3]] || 0) + 1;
+      if (r[5]) f.depts[r[5]] = (f.depts[r[5]] || 0) + 1;
     }
   }
 
@@ -178,6 +192,7 @@ function suggest_(q) {
     .slice(0, MAX_SUGGEST)
     .map(function (f) {
       if (f.type === 'name') { f.email = maskEmail_(topEmail_(f.mails)); delete f.mails; }
+      f.dept = topDept_(f.depts); delete f.depts;
       return f;
     });
 
@@ -194,13 +209,14 @@ function search_(type, key) {
   const col = type === 'email' ? 3 : 4;
   const events = [], seen = {};
   let person = '';
-  const mails = {};
+  const mails = {}, depts = {};
 
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
     if (r[col] !== k) continue;
     if (!person) person = r[2];
     if (r[3]) mails[r[3]] = (mails[r[3]] || 0) + 1;
+    if (r[5]) depts[r[5]] = (depts[r[5]] || 0) + 1;
     const id = r[0] + '|' + r[1];
     if (seen[id]) continue; // bỏ trùng cùng ngày + cùng sự kiện
     seen[id] = 1;
@@ -210,5 +226,5 @@ function search_(type, key) {
   events.sort(function (a, b) { return dateKey_(b.date) - dateKey_(a.date); });
   const emails = Object.keys(mails).sort(function (a, b) { return mails[b] - mails[a]; })
     .slice(0, 3).map(maskEmail_);
-  return { person: person, emails: emails, events: events };
+  return { person: person, emails: emails, dept: topDept_(depts), events: events };
 }
