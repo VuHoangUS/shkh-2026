@@ -250,6 +250,9 @@ input[type="text"]:focus{
 }
 
 main{ position:relative; z-index:3; }
+/* ô tìm kiếm (có danh sách gợi ý) luôn nằm trên khung kết quả */
+.search-card{ position:relative; z-index:6; }
+.card.result{ position:relative; z-index:1; }
 .note-warn{
   display:flex; gap:12px; align-items:flex-start; margin-bottom:18px;
   background:#fff7ec; color:#8a4510; border:1.5px solid #f6cfa3; border-left:6px solid var(--orange);
@@ -313,7 +316,7 @@ main{ position:relative; z-index:3; }
 .sugg .tx b{ display:block; font-weight:600; word-break:break-word; }
 .sugg .tx small{ color:var(--muted); font-size:12.5px; }
 .sugg .cnt{ flex:none; font-size:12px; font-weight:700; color:var(--brand); background:#fff; border:1px solid var(--border); border-radius:999px; padding:2px 9px; }
-.sugg .mail, .result-head .mail{ display:block; color:var(--muted); font-size:13px; font-weight:500; word-break:break-all; }
+.sugg .mail, .result-head .mail{ display:block; color:var(--muted); font-size:13px; font-weight:500; overflow-wrap:anywhere; }
 .result-head .mail{ margin-top:2px; }
 .dept{ color:var(--brand); font-weight:600; }
 /* Tabs */
@@ -467,7 +470,7 @@ select.sel:focus{ outline:none; border-color:var(--brand); box-shadow:0 0 0 4px 
     </div>
 
     <div class="panel" id="panelMe">
-    <section class="card reveal d1">
+    <section class="card reveal d1 search-card">
       <h2 class="card-title"><span class="step">1</span>Tìm tên hoặc email của bạn</h2>
       <div class="notice">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 15h-2v-6h2v6Zm0-8h-2V7h2v2Z"/></svg>

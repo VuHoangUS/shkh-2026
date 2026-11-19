@@ -28,8 +28,8 @@ const MIN_CHARS      = 5;      // chỉ gợi ý khi gõ từ ký tự thứ 5
 const MAX_SUGGEST    = 8;      // số gợi ý tối đa
 const CACHE_SECONDS  = 600;    // dữ liệu nhớ tạm 10 phút (sửa sheet -> tối đa 10 phút sau web mới cập nhật)
 const DEPT_PASSCODE  = '';     // để trống = ai cũng xem được danh sách theo khoa/phòng; đặt mã (vd 'abc123') để khóa
-const CODE_VERSION   = '2026-11-19.1';
-const CK             = 'v5_';  // tiền tố cache (đổi khi đổi cấu trúc dữ liệu)
+const CODE_VERSION   = '2026-11-19.2';
+const CK             = 'v6_';  // tiền tố cache (đổi khi đổi cấu trúc dữ liệu)
 
 /* ------------------------------ ENTRY ------------------------------ */
 
@@ -275,8 +275,37 @@ function loadRows_() {
       rolesOf_(data[r][cRole])
     ]);
   }
+  assignPeople_(rows);
   cachePut_('rows', rows);
   return rows;
+}
+
+// Tách người trùng tên: cùng họ tên nhưng khác khoa/phòng (cụ thể) => 2 người khác nhau.
+// Dòng ghi "Khác"/trống được gán vào người có cùng email; nếu chỉ có 1 khoa cụ thể thì gán vào đó;
+// nếu không xác định được (nhiều khoa, không khớp email) thì để riêng thành "Khác".
+// Thêm r[8] = "họ tên không dấu|khoa/phòng không dấu".
+function assignPeople_(rows) {
+  const byName = {};
+  rows.forEach(function (r) { (byName[r[4]] = byName[r[4]] || []).push(r); });
+  Object.keys(byName).forEach(function (n) {
+    const rs = byName[n], spec = {};
+    rs.forEach(function (r) {
+      const d = norm_(r[5]);
+      if (d && d !== 'khac') { const o = spec[d] || (spec[d] = {}); if (r[3]) o[r[3]] = 1; }
+    });
+    const keys = Object.keys(spec);
+    rs.forEach(function (r) {
+      const d = norm_(r[5]);
+      let id;
+      if (d && d !== 'khac') id = d;
+      else if (!keys.length) id = 'khac';
+      else {
+        const c = keys.filter(function (k) { return r[3] && spec[k][r[3]]; });
+        id = c.length === 1 ? c[0] : (keys.length === 1 ? keys[0] : 'khac');
+      }
+      r.push(n + '|' + id);
+    });
+  });
 }
 
 // id duy nhất của 1 buổi (để đếm không trùng)
@@ -307,8 +336,8 @@ function suggest_(q) {
     } else {
       const pos = r[4].indexOf(nq);
       if (pos < 0) continue;
-      f = found[r[4]] || (found[r[4]] = {
-        type: 'name', key: r[4], label: r[2], sub: '', mails: {}, depts: {}, ids: {},
+      f = found[r[8]] || (found[r[8]] = {
+        type: 'name', key: r[8], label: r[2], sub: '', mails: {}, depts: {}, ids: {},
         rank: pos === 0 ? 0 : (r[4].indexOf(' ' + nq) >= 0 ? 1 : 2)
       });
       if (r[3]) f.mails[r[3]] = (f.mails[r[3]] || 0) + 1;
@@ -342,13 +371,17 @@ function search_(type, key) {
   const k = type === 'email' ? String(key || '').trim().toLowerCase() : norm_(key);
   if (!k) return { person: '', events: [], missing: [], count: 0, total: events.length, tiet: 0 };
 
-  const col = type === 'email' ? 3 : 4;
+  let col = 4, kk = k;
+  if (type === 'email') { // email -> người (tên + khoa/phòng) đầu tiên dùng email đó
+    col = 8; kk = '';
+    for (let i = 0; i < rows.length; i++) if (rows[i][3] === k) { kk = rows[i][8]; break; }
+  } else if (String(key).indexOf('|') >= 0) { col = 8; kk = String(key); }
   const byId = {}, order = [], mails = {}, depts = {}, got = {};
   let person = '', nname = '';
 
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
-    if (r[col] !== k) continue;
+    if (!kk || r[col] !== kk) continue;
     if (!person) { person = r[2]; nname = r[4]; }
     if (r[3]) mails[r[3]] = (mails[r[3]] || 0) + 1;
     if (r[5]) depts[r[5]] = (depts[r[5]] || 0) + 1;
@@ -392,7 +425,7 @@ function search_(type, key) {
 function people_() {
   const rows = loadRows_(), m = {};
   rows.forEach(function (r) {
-    const p = m[r[4]] || (m[r[4]] = { name: r[2], depts: {}, ids: {} });
+    const p = m[r[8]] || (m[r[8]] = { name: r[2], depts: {}, ids: {} });
     if (r[5]) p.depts[r[5]] = (p.depts[r[5]] || 0) + 1;
     if (r[6] >= 0) p.ids[r[6]] = 1;
   });
@@ -448,7 +481,8 @@ function checkEventMatching() {
 function checkTiet() {
   const rows = loadRows_(), per = {};
   rows.forEach(function (r) {
-    const p = per[r[4]] || (per[r[4]] = { name: r[2], ev: {} });
+    const p = per[r[8]] || (per[r[8]] = { name: r[2], nn: r[4], depts: {}, ev: {} });
+    if (r[5]) p.depts[r[5]] = (p.depts[r[5]] || 0) + 1;
     const e = p.ev[idOf_(r)] || (p.ev[idOf_(r)] = []);
     (r[7] || []).forEach(function (x) { if (e.indexOf(x) < 0) e.push(x); });
   });
@@ -456,7 +490,7 @@ function checkTiet() {
   Object.keys(per).forEach(function (k) {
     const p = per[k];
     const calc = Object.keys(p.ev).reduce(function (s, id) { return s + tietOf_(p.ev[id]); }, 0);
-    const sh = sheetTiet_(k, '');
+    const sh = sheetTiet_(p.nn, topDept_(p.depts));
     if (sh === undefined) diff.push(p.name + ': không có trong sheet tiết (tính được ' + calc + ')');
     else if (sh !== calc) diff.push(p.name + ': sheet ' + sh + ' ≠ tính từ vai trò ' + calc);
   });
