@@ -257,6 +257,24 @@ main{ position:relative; z-index:3; }
 }
 .note-warn svg{ flex:none; margin-top:2px; color:var(--orange); }
 .note-warn b{ color:var(--orange-dark); }
+.note-warn .nw-body{ flex:1; min-width:0; }
+.note-warn .nw-sep{ border-top:1px dashed #efc79c; margin:10px 0 8px; }
+.note-warn ul{ margin:4px 0 0; padding-left:20px; }
+.note-warn li{ margin:2px 0; }
+.ev-tags{ display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
+.ev-tags .ev-tag{ margin-top:0; }
+.role{ display:inline-flex; align-items:center; font-size:12px; font-weight:700; color:var(--brand-dark); background:var(--brand-light); border-radius:999px; padding:2px 10px; }
+.role.sp{ color:#7a4b00; background:#fff0c9; }
+.ev-main{ flex:1; min-width:0; }
+.ev-tiet{ flex:none; margin-left:auto; text-align:center; min-width:54px; padding-left:12px; border-left:2px dashed var(--border); }
+.ev-tiet b{ display:block; font-size:30px; line-height:1; font-weight:800; color:var(--brand-dark); }
+.ev-tiet span{ font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+.ev-tiet.sp b{ color:var(--orange-dark); }
+.progress-grid{ display:flex; align-items:stretch; gap:14px; flex-wrap:wrap; }
+.pg-box{ flex:1; min-width:140px; }
+.pg-box + .pg-box{ border-left:2px dashed #c9dcee; padding-left:16px; }
+.pg-box .progress-lbl{ margin-top:4px; }
+@media (max-width:480px){ .ev-tiet b{ font-size:26px; } .ev-tiet{ min-width:46px; padding-left:8px; } }
 /* ---- Ô tìm kiếm + gợi ý ---- */
 .combo{ position:relative; }
 .combo input[type="text"]{ padding:14px 44px 14px 42px; font-size:16px; }
@@ -431,7 +449,15 @@ select.sel:focus{ outline:none; border-color:var(--brand); box-shadow:0 0 0 4px 
   <main>
     <div class="note-warn reveal d1" role="note">
       <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M1 21h22L12 2 1 21Zm12-3h-2v-2h2v2Zm0-4h-2v-4h2v4Z"/></svg>
-      <span><b>Lưu ý:</b> Chỉ khi hoàn thành đủ <b>2 bài Pre-test và Post-test</b> thì mới đủ điều kiện có tên trong danh sách tham dự.</span>
+      <div class="nw-body">
+        <div><b>Lưu ý:</b> Chỉ khi hoàn thành đủ <b>2 bài Pre-test và Post-test</b> thì mới đủ điều kiện có tên trong danh sách tham dự.</div>
+        <div class="nw-sep"></div>
+        <div><b>Số tiết/buổi:</b></div>
+        <ul>
+          <li>Đại biểu tham dự: <b>3 tiết/buổi</b></li>
+          <li>Chủ tọa/Báo cáo viên: <b>4 tiết/buổi</b></li>
+        </ul>
+      </div>
     </div>
     <div class="tabs reveal d1" role="tablist">
       <button class="tab" role="tab" id="tabMe" aria-selected="true" type="button">
@@ -634,12 +660,19 @@ async function choose(s){
 
 function fmtNum(n){ return String(n); }
 
+function roleChip(role){
+  const r = role || 'Đại biểu tham dự';
+  return '<span class="role'+(/Chủ tọa|Báo cáo viên/.test(r)?' sp':'')+'">'+esc(r)+'</span>';
+}
+
 function evItem(e, i, kind){
-  const tag = kind==='att' ? '<span class="ev-tag">✔ Đã tham dự</span>'
-    : kind==='up' ? '<span class="ev-tag grey">Sắp diễn ra</span>'
-    : '<span class="ev-tag red">✖ Chưa tham dự</span>';
+  const tags = kind==='att' ? '<div class="ev-tags"><span class="ev-tag">✔ Đã tham dự</span>'+roleChip(e.role)+'</div>'
+    : kind==='up' ? '<div class="ev-tags"><span class="ev-tag grey">Sắp diễn ra</span></div>'
+    : '<div class="ev-tags"><span class="ev-tag red">✖ Chưa tham dự</span></div>';
+  const tiet = kind==='att' && e.tiet != null
+    ? '<div class="ev-tiet'+(e.tiet>3?' sp':'')+'"><b>'+e.tiet+'</b><span>tiết</span></div>' : '';
   return '<li class="ev '+(kind==='miss'?'miss':kind==='up'?'miss up':'')+'" style="animation-delay:'+Math.min(i*50,500)+'ms">'+dateBadge(e.date)+
-    '<div><div class="ev-name">'+esc(e.event)+'</div>'+tag+'</div></li>';
+    '<div class="ev-main"><div class="ev-name">'+esc(e.event)+'</div>'+tags+'</div>'+tiet+'</li>';
 }
 
 function showResult(res){
@@ -658,8 +691,10 @@ function showResult(res){
 
   let html = '<div class="result-head"><div class="av">'+ini+'</div><div><h2>'+esc(res.person)+'</h2>'+meta+'</div></div>';
   if(total){
-    html += '<div class="progress"><div class="progress-top"><div class="progress-num">'+res.count+'<small> / '+total+' buổi</small></div>'+
-      '<div class="progress-lbl">Đã tham dự '+pct+'% số buổi Sinh hoạt Khoa học</div></div>'+
+    const tietBox = res.tiet != null
+      ? '<div class="pg-box"><div class="progress-num">'+fmtNum(res.tiet)+'<small> tiết</small></div><div class="progress-lbl">Số tiết tích lũy</div></div>' : '';
+    html += '<div class="progress"><div class="progress-grid"><div class="pg-box"><div class="progress-num">'+res.count+'<small> / '+total+' buổi</small></div>'+
+      '<div class="progress-lbl">Đã tham dự '+pct+'% số buổi</div></div>'+tietBox+'</div>'+
       '<div class="bar'+(res.count>=total?' full':'')+'"><i id="barFill"></i></div></div>';
     if(missPast.length || missUp.length){
       html += '<button type="button" class="btn-toggle" id="btnMiss" aria-expanded="false" aria-controls="missBox">'+
