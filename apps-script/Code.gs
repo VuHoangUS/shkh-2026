@@ -7,6 +7,7 @@
  *                              (danh sách đầy đủ các buổi -> mẫu số XX/30; dòng thiếu ngày như "Ghi chú" bị bỏ qua)
  * Sheet "DS Khoa/phòng"    : A STT | B Khoa/phòng
  * Sheet "DS người tham dự theo khoa/phòng": A STT | B Khoa/phòng | C Họ và tên | D Số buổi | E % | F Số tiết tích lũy
+ *   -> KHÔNG dùng làm nguồn cho web; web tự tính từ "Tra cứu" + "DS các buổi event". Chạy rebuildPeopleSheet() để ghi lại sheet này.
  * Sheet "Tra cứu" có thêm cột G "Vai trò" (trống = Đại biểu tham dự; Chủ tọa; Báo cáo viên)
  * (Mã tự dò cột theo tiêu đề dòng 1; không dò được thì dùng đúng thứ tự trên.)
  *
@@ -22,15 +23,15 @@ const SPREADSHEET_ID = '16MUn8yW0lqvdiGRc98q5OYKmiCHx3LoBLgozwyj9YHc';
 const SHEET_NAME     = 'Tra cứu';
 const EVENTS_SHEET   = 'DS các buổi event';
 const DEPTS_SHEET    = 'DS Khoa/phòng';
-const TIET_SHEET     = 'DS người tham dự theo khoa/phòng';
+const PEOPLE_SHEET   = 'DS người tham dự theo khoa/phòng'; // sheet kết quả: chạy rebuildPeopleSheet() để tính lại
 const TIET_DELEGATE  = 3;      // mặc định (khi sheet buổi không ghi số tiết): Đại biểu tham dự
 const TIET_SPEAKER   = 4;      // mặc định: Chủ tọa, Báo cáo viên
 const MIN_CHARS      = 5;      // chỉ gợi ý khi gõ từ ký tự thứ 5
 const MAX_SUGGEST    = 8;      // số gợi ý tối đa
 const CACHE_SECONDS  = 600;    // dữ liệu nhớ tạm 10 phút (sửa sheet -> tối đa 10 phút sau web mới cập nhật)
 const DEPT_PASSCODE  = '';     // để trống = ai cũng xem được danh sách theo khoa/phòng; đặt mã (vd 'abc123') để khóa
-const CODE_VERSION   = '2026-11-19.3';
-const CK             = 'v7_';  // tiền tố cache (đổi khi đổi cấu trúc dữ liệu)
+const CODE_VERSION   = '2026-11-19.4';
+const CK             = 'v8_';  // tiền tố cache (đổi khi đổi cấu trúc dữ liệu)
 
 /* ------------------------------ ENTRY ------------------------------ */
 
@@ -127,39 +128,6 @@ function tietOf_(roles, ev) {
 function num_(v) {
   const x = parseFloat(String(v == null ? '' : v).replace(',', '.'));
   return isNaN(x) ? null : x;
-}
-
-// Số tiết tích lũy theo sheet "DS người tham dự theo khoa/phòng": {họ tên không dấu: [{dept, tiet}]}
-function loadTiet_() {
-  const hit = cacheGet_('tiet');
-  if (hit) return hit;
-  const out = {};
-  const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(TIET_SHEET);
-  if (sheet && sheet.getLastRow() >= 2) {
-    const data = sheet.getRange(1, 1, sheet.getLastRow(), Math.max(sheet.getLastColumn(), 6)).getValues();
-    const h = data[0];
-    const cDept = findCol_(h, ['khoa', 'phong'], 1);
-    const cName = findCol_(h, ['ho va ten', 'ho ten'], 2);
-    const cTiet = findCol_(h, ['tiet'], 5);
-    for (let r = 1; r < data.length; r++) {
-      const name = norm_(data[r][cName]);
-      if (!name) continue;
-      const v = parseFloat(String(data[r][cTiet]).replace(',', '.'));
-      if (isNaN(v)) continue;
-      (out[name] = out[name] || []).push({ dept: norm_(data[r][cDept]), tiet: v });
-    }
-  }
-  cachePut_('tiet', out);
-  return out;
-}
-
-// Lấy số tiết của 1 người từ sheet (ưu tiên trùng khoa/phòng); undefined nếu không có
-function sheetTiet_(nname, dept) {
-  const list = loadTiet_()[nname];
-  if (!list || !list.length) return undefined;
-  const d = norm_(dept);
-  for (let i = 0; i < list.length; i++) if (list[i].dept === d) return list[i].tiet;
-  return list[0].tiet;
 }
 
 /* ------------------------------ DATE ------------------------------ */
@@ -394,12 +362,12 @@ function search_(type, key) {
     for (let i = 0; i < rows.length; i++) if (rows[i][3] === k) { kk = rows[i][8]; break; }
   } else if (String(key).indexOf('|') >= 0) { col = 8; kk = String(key); }
   const byId = {}, order = [], mails = {}, depts = {}, got = {};
-  let person = '', nname = '';
+  let person = '';
 
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
     if (!kk || r[col] !== kk) continue;
-    if (!person) { person = r[2]; nname = r[4]; }
+    if (!person) person = r[2];
     if (r[3]) mails[r[3]] = (mails[r[3]] || 0) + 1;
     if (r[5]) depts[r[5]] = (depts[r[5]] || 0) + 1;
     const id = idOf_(r);
@@ -425,30 +393,35 @@ function search_(type, key) {
     .slice(0, 3).map(maskEmail_);
 
   const dept = topDept_(depts);
-  const calc = attended.reduce(function (s, e) { return s + e.tiet; }, 0);
-  const fromSheet = nname ? sheetTiet_(nname, dept) : undefined;
+  const tiet = attended.reduce(function (s, e) { return s + e.tiet; }, 0); // tự tính: số tiết từng buổi theo vai trò
 
   return {
     person: person, emails: emails, dept: dept,
     events: attended, missing: missing,
     count: Object.keys(got).length, total: events.length,
-    tiet: fromSheet !== undefined ? fromSheet : calc
+    tiet: tiet
   };
 }
 
 /* ------------------------------ KHOA / PHÒNG ------------------------------ */
 
-// Mỗi người (gộp theo họ tên không dấu): {key, name, dept, count}
+// Mỗi người (họ tên + khoa/phòng): {key, name, dept, count (số buổi khớp DS), tiet (tổng số tiết)}
 function people_() {
-  const rows = loadRows_(), m = {};
+  const rows = loadRows_(), events = loadEvents_(), m = {};
   rows.forEach(function (r) {
-    const p = m[r[8]] || (m[r[8]] = { name: r[2], depts: {}, ids: {} });
+    const p = m[r[8]] || (m[r[8]] = { name: r[2], depts: {}, ids: {}, ev: {} });
     if (r[5]) p.depts[r[5]] = (p.depts[r[5]] || 0) + 1;
     if (r[6] >= 0) p.ids[r[6]] = 1;
+    const id = idOf_(r), e = p.ev[id] || (p.ev[id] = { idx: r[6], roles: [] });
+    (r[7] || ['Đại biểu tham dự']).forEach(function (x) { if (e.roles.indexOf(x) < 0) e.roles.push(x); });
   });
   return Object.keys(m).map(function (k) {
     const p = m[k];
-    return { key: k, name: p.name, dept: topDept_(p.depts), count: Object.keys(p.ids).length };
+    const tiet = Object.keys(p.ev).reduce(function (s, id) {
+      const e = p.ev[id];
+      return s + tietOf_(e.roles, e.idx >= 0 ? events[e.idx] : null);
+    }, 0);
+    return { key: k, name: p.name, dept: topDept_(p.depts), count: Object.keys(p.ids).length, tiet: tiet };
   });
 }
 
@@ -483,7 +456,67 @@ function dept_(name) {
   return { dept: String(name || ''), people: list, total: loadEvents_().length };
 }
 
-/* ------------------------------ KIỂM TRA ------------------------------ */
+/* ------------------------------ GHI LẠI SHEET THỐNG KÊ ------------------------------ */
+
+function flushCache_() {
+  const cache = CacheService.getScriptCache();
+  ['rows', 'events'].forEach(function (name) {
+    const n = +cache.get(CK + name + '_n') || 0, keys = [CK + name + '_n'];
+    for (let i = 0; i < n; i++) keys.push(CK + name + '_' + i);
+    cache.removeAll(keys);
+  });
+}
+
+/**
+ * Tính lại sheet "DS người tham dự theo khoa/phòng" từ "Tra cứu" + "DS các buổi event":
+ *  - cùng họ tên nhưng khác khoa/phòng => 2 người riêng (cùng cách tách như trên web)
+ *  - số buổi = số buổi khác nhau (khớp DS các buổi event), % = số buổi / tổng số buổi
+ *  - số tiết = tổng số tiết từng buổi theo vai trò (Đại biểu / Chủ tọa / Báo cáo viên)
+ * Chỉ ghi đè vùng dữ liệu A2:F của sheet đó (giữ dòng tiêu đề). Chạy tay từ menu "SHKH" hoặc trong editor.
+ */
+function rebuildPeopleSheet() {
+  flushCache_();
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const total = loadEvents_().length;
+  const people = people_();
+  const order = depts_().depts.map(function (d) { return d.name; });
+
+  const byDept = {};
+  people.forEach(function (p) { const k = norm_(p.dept) || 'khac'; (byDept[k] = byDept[k] || []).push(p); });
+  const cmp = function (a, b) { return b.count - a.count || b.tiet - a.tiet || a.name.localeCompare(b.name, 'vi'); };
+
+  const out = [], used = {};
+  function add(deptName, list) {
+    list.sort(cmp).forEach(function (p) { out.push(['=ROW()-1', deptName, p.name, p.count, total ? p.count / total : 0, p.tiet]); });
+  }
+  order.forEach(function (name) { const k = norm_(name); used[k] = 1; add(name, byDept[k] || []); });
+  Object.keys(byDept).sort().forEach(function (k) { // khoa/phòng chưa có trong DS Khoa/phòng
+    if (!used[k]) add(byDept[k][0].dept || 'Khác', byDept[k]);
+  });
+
+  let sh = ss.getSheetByName(PEOPLE_SHEET) || ss.insertSheet(PEOPLE_SHEET);
+  if (!sh.getRange(1, 1).getValue()) {
+    sh.getRange(1, 1, 1, 6).setValues([['STT', 'Khoa/phòng', 'Họ và tên', 'Số buổi tham dự', '% số buổi tham dự', 'Số tiết tích lũy']]);
+    sh.setFrozenRows(1);
+  }
+  if (sh.getMaxRows() < out.length + 1) sh.insertRowsAfter(sh.getMaxRows(), out.length + 1 - sh.getMaxRows());
+  sh.getRange(2, 1, sh.getMaxRows() - 1, 6).clearContent();
+  if (out.length) {
+    sh.getRange(2, 1, out.length, 6).setValues(out);
+    sh.getRange(2, 4, out.length, 1).setNumberFormat('0"/' + total + '"');
+    sh.getRange(2, 5, out.length, 1).setNumberFormat('0.0%');
+  }
+  Logger.log('Đã ghi ' + out.length + ' người (' + total + ' buổi) vào sheet "' + PEOPLE_SHEET + '".');
+  return out.length;
+}
+
+function onOpen() {
+  try {
+    SpreadsheetApp.getUi().createMenu('SHKH')
+      .addItem('Tính lại sheet "DS người tham dự theo khoa/phòng"', 'rebuildPeopleSheet')
+      .addToUi();
+  } catch (e) { /* script không gắn với sheet thì bỏ qua */ }
+}
 
 // Chạy tay trong editor để xem tên sự kiện nào ở sheet "Tra cứu" chưa khớp với "DS các buổi event"
 function checkEventMatching() {
@@ -492,26 +525,4 @@ function checkEventMatching() {
   const keys = Object.keys(bad);
   Logger.log(keys.length ? 'Chưa khớp (' + keys.length + '):\n' + keys.map(function (k) { return k + '  x' + bad[k]; }).join('\n')
                          : 'Tất cả các dòng đều khớp với DS các buổi event.');
-}
-
-// Chạy tay: so sánh "Số tiết tích lũy" trong sheet với số tiết tính từ cột Vai trò (3 / 4 tiết mỗi buổi)
-function checkTiet() {
-  const rows = loadRows_(), per = {};
-  rows.forEach(function (r) {
-    const p = per[r[8]] || (per[r[8]] = { name: r[2], nn: r[4], depts: {}, ev: {} });
-    if (r[5]) p.depts[r[5]] = (p.depts[r[5]] || 0) + 1;
-    const e = p.ev[idOf_(r)] || (p.ev[idOf_(r)] = { idx: r[6], roles: [] });
-    (r[7] || []).forEach(function (x) { if (e.roles.indexOf(x) < 0) e.roles.push(x); });
-  });
-  const events = loadEvents_();
-  const diff = [];
-  Object.keys(per).forEach(function (k) {
-    const p = per[k];
-    const calc = Object.keys(p.ev).reduce(function (s, id) { return s + tietOf_(p.ev[id].roles, p.ev[id].idx >= 0 ? events[p.ev[id].idx] : null); }, 0);
-    const sh = sheetTiet_(p.nn, topDept_(p.depts));
-    if (sh === undefined) diff.push(p.name + ': không có trong sheet tiết (tính được ' + calc + ')');
-    else if (sh !== calc) diff.push(p.name + ': sheet ' + sh + ' ≠ tính từ vai trò ' + calc);
-  });
-  Logger.log(diff.length ? 'Lệch (' + diff.length + '/' + Object.keys(per).length + '):\n' + diff.slice(0, 60).join('\n')
-                         : 'Số tiết trong sheet khớp hoàn toàn với số tiết tính từ vai trò.');
 }
