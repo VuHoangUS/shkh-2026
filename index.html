@@ -558,6 +558,8 @@ const cache = new Map();
 
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const strip = s => String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d').replace(/Đ/g,'D');
+// Chữ cái đầu của TÊN (từ cuối cùng trong họ tên), bỏ dấu: "NGUYỄN THỊ THANH LOAN" -> "L"
+const initial = n => { const w = String(n||'').trim().split(/\s+/); return (strip(w[w.length-1]||'')[0] || '?').toUpperCase(); };
 const effLen = s => strip(s).replace(/\s/g,'').length;
 
 async function api(params, signal){
@@ -587,7 +589,7 @@ function renderSugg(list, query){
     sugg.innerHTML = '<li class="empty">Không tìm thấy tên hoặc email phù hợp</li>';
   } else {
     sugg.innerHTML = list.map((s,i) => {
-      const ini = esc((strip(s.type==='email' ? s.sub : s.label).trim()[0] || '?').toUpperCase());
+      const ini = esc(initial(s.type==='email' ? s.sub : s.label));
       const main = s.type==='email' ? esc(s.label) : highlight(s.label, query);
       const sub = s.type==='email' ? '<small>' + esc(s.sub) + '</small>' : '';
       const mailTxt = s.type==='name' ? s.email : '';
@@ -738,7 +740,7 @@ function showResult(res){
     return;
   }
   view = { res:res, sort:view.sort, month:'all' };
-  const ini = esc((strip(res.person).trim()[0] || '?').toUpperCase());
+  const ini = esc(initial(res.person));
   const meta = ((res.emails&&res.emails.length)||res.dept) ? '<span class="mail">'+(res.emails||[]).map(e => '<span class="m-e">'+esc(e)+'</span>').join('')+(res.dept?'<span class="dept">'+esc(res.dept)+'</span>':'')+'</span>' : '';
   const pctVal = res.pct != null ? res.pct : (total ? res.count*100/total : 0);
   const pct = Math.max(0, Math.min(100, pctVal));
