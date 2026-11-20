@@ -375,7 +375,8 @@ select.sel:focus{ outline:none; border-color:var(--brand); box-shadow:0 0 0 4px 
 .plist li:hover, .plist li:focus-visible{ background:var(--brand-light); outline:none; }
 .plist .rk{ flex:none; width:26px; text-align:center; font-size:13px; font-weight:700; color:var(--muted); }
 .plist .nm{ flex:1; min-width:0; font-weight:600; word-break:break-word; }
-.plist .sc{ flex:none; width:96px; text-align:right; }
+.plist .sc{ flex:none; width:104px; text-align:right; }
+.plist .tt{ display:block; font-size:12px; color:var(--muted); font-weight:600; }
 .plist .sc b{ font-size:14.5px; color:var(--brand-dark); }
 .plist .sc b small{ color:var(--muted); font-weight:600; }
 .plist .mini{ height:5px; background:#e6edf4; border-radius:999px; margin-top:4px; overflow:hidden; }
@@ -661,7 +662,8 @@ async function choose(s){
   }
 }
 
-function fmtNum(n){ return String(n); }
+function fmtNum(n){ return String(n).replace('.', ','); }
+function fmtPct(p){ return (Math.round(p*10)/10).toString().replace('.', ',') + '%'; }
 
 function roleChip(role){
   const r = role || 'Đại biểu tham dự';
@@ -688,7 +690,8 @@ function showResult(res){
   }
   const ini = esc((strip(res.person).trim()[0] || '?').toUpperCase());
   const meta = ((res.emails&&res.emails.length)||res.dept) ? '<span class="mail">'+(res.emails||[]).map(esc).join(' · ')+(res.emails&&res.emails.length&&res.dept?' · ':'')+(res.dept?'<span class="dept">'+esc(res.dept)+'</span>':'')+'</span>' : '';
-  const pct = total ? Math.min(100, Math.round(res.count*100/total)) : 0;
+  const pctVal = res.pct != null ? res.pct : (total ? res.count*100/total : 0);
+  const pct = Math.max(0, Math.min(100, pctVal));
   const missPast = (res.missing||[]).filter(m => !m.upcoming);
   const missUp = (res.missing||[]).filter(m => m.upcoming);
 
@@ -697,7 +700,7 @@ function showResult(res){
     const tietBox = res.tiet != null
       ? '<div class="pg-box"><div class="progress-num">'+fmtNum(res.tiet)+'<small> tiết</small></div><div class="progress-lbl">Số tiết tích lũy</div></div>' : '';
     html += '<div class="progress"><div class="progress-grid"><div class="pg-box"><div class="progress-num">'+res.count+'<small> / '+total+' buổi</small></div>'+
-      '<div class="progress-lbl">Đã tham dự '+pct+'% số buổi</div></div>'+tietBox+'</div>'+
+      '<div class="progress-lbl">Đã tham dự '+fmtPct(pctVal)+' số buổi</div></div>'+tietBox+'</div>'+
       '<div class="bar'+(res.count>=total?' full':'')+'"><i id="barFill"></i></div></div>';
     if(missPast.length || missUp.length){
       html += '<button type="button" class="btn-toggle" id="btnMiss" aria-expanded="false" aria-controls="missBox">'+
@@ -796,7 +799,7 @@ function renderDept(res){
     const rows = people.map((p,i) => ({p,i})).filter(x => !f || strip(x.p.name).toLowerCase().indexOf(f) >= 0);
     list.innerHTML = rows.length ? rows.map(x =>
       '<li tabindex="0" data-k="'+esc(x.p.key)+'" data-n="'+esc(x.p.name)+'" class="'+(x.p.count?'':'zero')+'"><span class="rk">'+(x.i+1)+'</span><span class="nm">'+esc(x.p.name)+'</span>'+
-      '<span class="sc"><b>'+x.p.count+(total?'<small>/'+total+'</small>':'')+'</b>'+(total?'<div class="mini"><i style="width:'+Math.min(100,x.p.count*100/total)+'%"></i></div>':'')+'</span></li>').join('')
+      '<span class="sc"><b>'+x.p.count+(total?'<small>/'+total+'</small>':'')+'</b>'+(x.p.tiet!=null?'<span class="tt">'+fmtNum(x.p.tiet)+' tiết</span>':'')+(total?'<div class="mini"><i style="width:'+Math.min(100,(x.p.pct!=null?x.p.pct:x.p.count*100/total))+'%"></i></div>':'')+'</span></li>').join('')
       : '<li class="empty-note" style="cursor:default">Không có kết quả</li>';
   }
   draw('');
