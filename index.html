@@ -424,6 +424,7 @@ select.sel:focus{ outline:none; border-color:var(--brand); box-shadow:0 0 0 4px 
 .count-line{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin:8px 2px 0; font-size:13px; color:var(--muted); font-weight:600; min-height:24px; }
 .link-btn{ border:none; background:none; color:var(--brand); font:inherit; font-weight:700; font-size:13px; cursor:pointer; padding:2px 4px; text-decoration:underline; }
 .filters + #evBox .ev-list{ margin-top:10px; }
+.sync-note{ margin:10px 0 0; padding:9px 12px; font-size:13px; color:#8a4510; background:#fff7ec; border:1px solid #f6cfa3; border-radius:12px; }
 .panel.hidden{ display:none; }
 .sugg mark{ background:#fff3b0; color:inherit; border-radius:3px; padding:0 1px; }
 .sugg .empty{ cursor:default; color:var(--muted); justify-content:center; }
@@ -795,6 +796,7 @@ function showResult(res){
     html += '<div class="progress"><div class="progress-grid"><div class="pg-box"><div class="progress-num">'+res.count+'<small> / '+total+' buổi</small></div>'+
       '<div class="progress-lbl">Đã tham dự '+fmtPct(pctVal)+' số buổi</div></div>'+tietBox+'</div>'+
       '<div class="bar'+(res.count>=total?' full':'')+'"><i id="barFill"></i></div></div>';
+    if(res.sync === false) html += '<p class="sync-note">⚠ Số liệu tổng hợp và danh sách buổi bên dưới đang chênh nhau do dữ liệu vừa được cập nhật. Vui lòng tải lại sau khoảng 1 phút.</p>';
     if(!hasMiss) html += '<div class="allgood">🎉 Chúc mừng! Bạn đã tham dự đủ tất cả các buổi.</div>';
   }
 

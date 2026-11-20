@@ -31,9 +31,9 @@ const TIET_DELEGATE  = 3;      // mặc định (khi sheet buổi không ghi s�
 const TIET_SPEAKER   = 4;      // mặc định: Chủ tọa, Báo cáo viên
 const MIN_CHARS      = 5;      // chỉ gợi ý khi gõ từ ký tự thứ 5
 const MAX_SUGGEST    = 8;      // số gợi ý tối đa
-const CACHE_SECONDS  = 600;    // dữ liệu nhớ tạm 10 phút (sửa sheet -> tối đa 10 phút sau web mới cập nhật)
+const CACHE_SECONDS  = 60;     // dữ liệu nhớ tạm 60 giây (sửa sheet -> tối đa ~1 phút sau web mới cập nhật); cùng thời hạn với STATS_CACHE để các con số khớp nhau
 const DEPT_PASSCODE  = '';     // để trống = ai cũng xem được danh sách theo khoa/phòng; đặt mã (vd 'abc123') để khóa
-const CODE_VERSION   = '2026-11-20.1';
+const CODE_VERSION   = '2026-11-20.2';
 const CK             = 'v9_';  // tiền tố cache (đổi khi đổi cấu trúc dữ liệu)
 
 /* ------------------------------ ENTRY ------------------------------ */
@@ -468,6 +468,7 @@ function search_(type, key) {
   const dept = topDept_(depts);
   const calcTiet = attended.reduce(function (s, e) { return s + e.tiet; }, 0); // số tiết tự tính (dự phòng)
   const calcCount = Object.keys(got).length;
+  const listed = attended.length; // số buổi đang liệt kê bên dưới (gồm cả buổi chưa khớp DS)
   // Số buổi / % / số tiết: đọc trực tiếp từ sheet "DS người tham dự theo khoa/phòng"; không có thì dùng số tự tính
   const st = nname ? statFor_(nname, dept, Object.keys(mails)) : undefined;
   const count = st && st.count !== null ? st.count : calcCount;
@@ -478,6 +479,7 @@ function search_(type, key) {
     person: person, emails: emails, dept: dept,
     events: attended, missing: missing,
     count: count, pct: pct, total: events.length,
+    sync: count === calcCount && calcCount === listed, // false: số trong sheet thống kê lệch với danh sách buổi (vd. dữ liệu vừa sửa)
     tiet: tiet
   };
 }
