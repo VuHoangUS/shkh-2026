@@ -323,7 +323,7 @@ main{ position:relative; z-index:3; }
 .sugg .mail, .result-head .mail{ display:flex; flex-wrap:wrap; gap:1px 10px; color:var(--muted); font-size:clamp(12px,3.5vw,13px); font-weight:500; }
 .mail > span{ overflow-wrap:anywhere; }
 
-.result-head .mail{ margin-top:2px; }
+.result-head .mail{ margin-top:2px; flex-direction:column; align-items:flex-start; gap:2px; } /* email một dòng, khoa/phòng xuống dòng bên dưới (mọi cỡ màn hình) */
 .dept{ color:var(--brand); font-weight:600; }
 /* Tabs */
 .tabs{ display:flex; gap:10px; margin-bottom:18px; }
